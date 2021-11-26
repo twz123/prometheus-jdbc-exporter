@@ -70,7 +70,7 @@ jobs:
         git add .
         git commit --message="Release version $VERSION"
         git tag -a --message="Release version $VERSION" -- "$VERSION"
-        git -c advice.detachedHead=false checkout -- "$VERSION"
+        git -c advice.detachedHead=false checkout "$VERSION" --
         git show
 
     - name: Fetch dependencies
@@ -96,11 +96,19 @@ jobs:
         VERSION: ${{ steps.generate_version.outputs.version }}
       with:
         script: |
-          await exec.exec('git', ['push', 'origin', 'tag', '--', process.env.VERSION]);
-          await github.rest.repos.createRelease({
+          const release = {
             owner: context.payload.repository.owner.name,
             repo: context.payload.repository.name,
             tag_name: process.env.VERSION
+          };
+
+          await exec.exec('git', ['push', 'origin', 'tag', '--', release.tag_name]);
+          await github.rest.repos.createRelease({
+            ...release,
+            // this should become github.rest.repos.generateReleaseNotes(...) when the rest-endpoint-methods plugin is updated to >= v5.12
+            // https://github.com/actions/github-script/blob/5e5d515dc7088569e3d5a2cfecfe542588a1efc6/package.json#L45
+            // https://github.com/octokit/plugin-rest-endpoint-methods.js/commit/5d2de25b3ffe638db3aac59fd17c0a00e0ceae26
+            ...await github.rest.request('POST /repos/{owner}/{repo}/releases/generate-notes', release),
           });
 
     - name: Push Docker image
@@ -112,14 +120,10 @@ jobs:
         DOCKER_IMAGE: ${{ steps.build.outputs.image }}
       with:
         script: |
-          await exec.exec('docker', [
-            'login',
-            '--password-stdin',
-            '-u', process.env.DOCKER_REGISTRY_USERNAME,
-            '--', process.env.DOCKER_REGISTRY
-          ], {
-            input: Buffer.from(process.env.DOCKER_REGISTRY_PASSWORD, 'utf8')
-          });
+          await exec.exec(
+            'docker', [ 'login', '--password-stdin', '-u', process.env.DOCKER_REGISTRY_USERNAME, '--', process.env.DOCKER_REGISTRY ],
+            { input: Buffer.from(process.env.DOCKER_REGISTRY_PASSWORD, 'utf8') }
+          );
 
           try {
             await exec.exec('docker', ['push', '--', process.env.DOCKER_IMAGE]);
