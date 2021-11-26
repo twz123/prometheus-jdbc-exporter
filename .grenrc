@@ -1,6 +1,0 @@
-{
-  "dataSource": "commits",
-  "prefix": "",
-  "onlyMilestones": false,
-  "groupBy": false
-}

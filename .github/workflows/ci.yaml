@@ -10,8 +10,8 @@ jobs:
     runs-on: ubuntu-20.04
     timeout-minutes: 5
 
-    outputs:
-      version: ${{ steps.generate_version.outputs.version }}
+    # outputs:
+    #   version: ${{ steps.generate_version.outputs.version }}
 
     env:
       DOCKER_REGISTRY: ghcr.io
@@ -69,8 +69,8 @@ jobs:
         git config user.email eng+ci@yieldlab.de
         git add .
         git commit --message="Release version $VERSION"
-        git tag -a --message="Release version $VERSION" "$VERSION"
-        git checkout "$VERSION"
+        git tag -a --message="Release version $VERSION" -- "$VERSION"
+        git -c advice.detachedHead=false checkout -- "$VERSION"
         git show
 
     - name: Fetch dependencies
@@ -89,41 +89,62 @@ jobs:
           clean verify jib:dockerBuild
         echo ::set-output name=image::"$DOCKER_REGISTRY/$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
 
-    - name: Push release tag
+    - name: Create GitHub release
       if: ${{ github.ref == 'refs/heads/main' }}
+      uses: actions/github-script@v5
       env:
         VERSION: ${{ steps.generate_version.outputs.version }}
-      run: git push origin tag -- "$VERSION"
+      with:
+        script: |
+          await exec.exec('git', ['push', 'origin', 'tag', '--', process.env.VERSION]);
+          await github.rest.repos.createRelease({
+            owner: context.payload.repository.owner.name,
+            repo: context.payload.repository.name,
+            tag_name: process.env.VERSION
+          });
 
     - name: Push Docker image
       if: ${{ !github.event.pull_request || (github.event.pull_request.base.repo.owner.login == github.event.pull_request.head.repo.owner.login) }}
+      uses: actions/github-script@v5
       env:
         DOCKER_REGISTRY_USERNAME: ${{ github.actor }}
         DOCKER_REGISTRY_PASSWORD: ${{ github.token }}
         DOCKER_IMAGE: ${{ steps.build.outputs.image }}
-      run: |
-        ( set +x; printf %s "$DOCKER_REGISTRY_PASSWORD"; ) | docker login --password-stdin -u "$DOCKER_REGISTRY_USERNAME" -- "$DOCKER_REGISTRY"
-        docker push -- "$DOCKER_IMAGE"
-        docker logout -- "$DOCKER_REGISTRY"
-
-  release:
-    name: GitHub release
-    runs-on: ubuntu-20.04
-    if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
-    needs: build
-    steps:
-
-    - name: Set up Node 14
-      uses: actions/setup-node@v2
       with:
-        node-version: '14'
+        script: |
+          await exec.exec('docker', [
+            'login',
+            '--password-stdin',
+            '-u', process.env.DOCKER_REGISTRY_USERNAME,
+            '--', process.env.DOCKER_REGISTRY
+          ], {
+            input: Buffer.from(process.env.DOCKER_REGISTRY_PASSWORD, 'utf8')
+          });
 
-    - name: Create GitHub release
-      env:
-        VERSION: ${{ needs.build.outputs.version }}
-        GITHUB_REPO_OWNER: ${{ github.event.repository.owner.name }}
-        GITHUB_REPO_NAME: ${{ github.event.repository.name }}
-        GREN_GITHUB_TOKEN: ${{ github.token }}
-      run: |
-        npm install -g github-release-notes@0.17.3
-        gren release --username="$GITHUB_REPO_OWNER" --repo="$GITHUB_REPO_NAME" -t "$VERSION" --override
+          try {
+            await exec.exec('docker', ['push', '--', process.env.DOCKER_IMAGE]);
+          } finally {
+            await exec.exec('docker', ['logout', '--', process.env.DOCKER_REGISTRY]);
+          }
+
+  # release:
+  #   name: GitHub release
+  #   runs-on: ubuntu-20.04
+  #   if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
+  #   needs: build
+  #   steps:
+
+  #   - name: Set up Node 14
+  #     uses: actions/setup-node@v2
+  #     with:
+  #       node-version: '14'
+
+  #   - name: Create GitHub release
+  #     env:
+  #       VERSION: ${{ needs.build.outputs.version }}
+  #       GITHUB_REPO_OWNER: ${{ github.event.repository.owner.name }}
+  #       GITHUB_REPO_NAME: ${{ github.event.repository.name }}
+  #       GREN_GITHUB_TOKEN: ${{ github.token }}
+  #     run: |
+  #       npm install -g github-release-notes@0.17.3
+  #       gren release --username="$GITHUB_REPO_OWNER" --repo="$GITHUB_REPO_NAME" -t "$VERSION" --override
