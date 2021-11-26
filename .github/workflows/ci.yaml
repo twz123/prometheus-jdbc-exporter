@@ -70,7 +70,7 @@ jobs:
         git add .
         git commit --message="Release version $VERSION"
         git tag -a --message="Release version $VERSION" -- "$VERSION"
-        git -c advice.detachedHead=false checkout -- "$VERSION"
+        git -c advice.detachedHead=false checkout "$VERSION" --
         git show
 
     - name: Fetch dependencies
@@ -96,11 +96,16 @@ jobs:
         VERSION: ${{ steps.generate_version.outputs.version }}
       with:
         script: |
-          await exec.exec('git', ['push', 'origin', 'tag', '--', process.env.VERSION]);
-          await github.rest.repos.createRelease({
+          const release = {
             owner: context.payload.repository.owner.name,
             repo: context.payload.repository.name,
             tag_name: process.env.VERSION
+          };
+
+          await exec.exec('git', ['push', 'origin', 'tag', '--', release.tag_name]);
+          await github.rest.repos.createRelease({
+            ...release,
+            ...await github.rest.repos.generateReleaseNotes(release),
           });
 
     - name: Push Docker image
