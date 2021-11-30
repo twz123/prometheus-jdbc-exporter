@@ -3,7 +3,7 @@
 
     <groupId>com.yieldlab</groupId>
     <artifactId>prometheus-jdbc-exporter</artifactId>
-    <version>main-SNAPSHOT</version>
+    <version>2021.11.30.144</version>
     <packaging>jar</packaging>
 
     <name>prometheus-jdbc-exporter</name>
