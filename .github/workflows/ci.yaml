@@ -93,9 +93,13 @@ jobs:
         VERSION: ${{ steps.generate_version.outputs.version }}
       with:
         script: |
-          const release = {
+          const repo = {
             owner: context.payload.repository.owner.name,
             repo: context.payload.repository.name,
+          };
+
+          const release = {
+            ...repo,
             tag_name: process.env.VERSION
           };
 
@@ -105,7 +109,10 @@ jobs:
             // this should become github.rest.repos.generateReleaseNotes(...) when the rest-endpoint-methods plugin is updated to >= v5.12
             // https://github.com/actions/github-script/blob/5e5d515dc7088569e3d5a2cfecfe542588a1efc6/package.json#L45
             // https://github.com/octokit/plugin-rest-endpoint-methods.js/commit/5d2de25b3ffe638db3aac59fd17c0a00e0ceae26
-            ...(await github.request('POST /repos/{owner}/{repo}/releases/generate-notes', release)).data,
+            ...(await github.request('POST /repos/{owner}/{repo}/releases/generate-notes', {
+              ...release,
+                previous_tag_name: (await github.rest.repos.getLatestRelease(repo)).tag_name
+            })).data,
           });
 
     - name: Push Docker image
