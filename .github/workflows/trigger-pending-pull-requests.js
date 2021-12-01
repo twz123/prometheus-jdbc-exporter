@@ -103,5 +103,5 @@ module.exports = async ({ github, context, core }) => {
 
   core.debug(`Awaiting ${triggeredPullRequests}`);
 
-  return await Promise.all(triggeredPullRequests);
+  return await Promise.allSettled(triggeredPullRequests);
 };
