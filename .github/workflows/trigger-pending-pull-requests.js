@@ -100,7 +100,7 @@ module.exports = async ({ github, context, core }) => {
 
       case "MERGEABLE":
         rerunsTriggered = await triggerReruns("CI", pullRequest).catch(cause => {
-          return new Error(`failed to trigger runs for PR #${pullRequest.number}: ${cause}`, { cause });
+          return `failed to trigger runs for PR #${pullRequest.number}: ${cause}`;
         });
         break;
 
