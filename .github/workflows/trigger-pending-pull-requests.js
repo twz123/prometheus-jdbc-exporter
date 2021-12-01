@@ -24,9 +24,9 @@ module.exports = async ({ github, context, core }) => {
       refName: context.ref.replace(/^refs\/heads\//, "")
     };
 
-    core.debug(queryVars);
+    core.debug("Fetching open PRs:", queryVars);
     const data = await github.graphql(query, { ...context.repo, ...queryVars, });
-    core.debug(data);
+    core.debug("Fetched open PRs:", data);
 
     return data.repository.pullRequests.nodes;
   };
@@ -48,6 +48,7 @@ module.exports = async ({ github, context, core }) => {
     for (let retryAttempt = 0; pullRequest.mergeable === "UNKNOWN" && retryAttempt++ <= 10;) {
       // Delay the next call between 1 and 5 seconds
       await (new Promise((resolve) => setTimeout(resolve, Math.min(retryAttempt, 5) * 1000)));
+      core.debug("Re-fetching PR #", pullRequest.number);
       const data = await github.graphql(prQuery, {
         ...context.repo,
         number: pullRequest.number,
@@ -55,6 +56,7 @@ module.exports = async ({ github, context, core }) => {
       pullRequest = data.repository.pullRequest;
     }
 
+    core.debug("Resolved mergeable state:", pullRequest);
     return pullRequest;
   }
 
@@ -85,7 +87,7 @@ module.exports = async ({ github, context, core }) => {
   const openPullRequests = await fetchOpenPullRequests();
 
   const triggeredPullRequests = openPullRequests.map(pr => async () => {
-    const pullRequest = resolveUnknownMergeable(pr);
+    const pullRequest = await resolveUnknownMergeable(pr);
     let rerunsTriggered = false;
     switch (pullRequest.mergeable) {
       case "UNKNOWN":
