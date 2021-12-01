@@ -1,5 +1,5 @@
 module.exports = ({ github, context, core }) => {
-  const mergeablePullRequests = (() => {
+  const mergeablePullRequests = (async () => {
     const query = `
       query ($owner: String!, $repo: String!, $refName: String!) {
         repository(owner: $owner, name: $repo) {
