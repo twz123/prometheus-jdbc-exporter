@@ -71,7 +71,7 @@ module.exports = async ({ github, context, core }) => {
       return run.name === runName && run.pull_requests.some((runPullRequest) => {
         return runPullRequest.number === pullRequest.number;
       })
-    }).map(run => async () => {
+    }).map(run => (async () => {
       // Is it required to cancel any runs which are in non-terminal states?
       core.info(`Re-running workflow run ${run.id} for PR #${pullRequest.number} in status ${run.status}`);
       // https://docs.github.com/en/rest/reference/actions#re-run-a-workflow
@@ -79,13 +79,13 @@ module.exports = async ({ github, context, core }) => {
         ...context.repo,
         run_id: run.id,
       });
-    })
+    })())
   }
 
   const openPullRequests = await fetchOpenPullRequests();
   core.debug(`Fetched open PRs: ${openPullRequests}`);
 
-  const triggeredPullRequests = openPullRequests.map(pr => async () => {
+  const triggeredPullRequests = openPullRequests.map(pr => (async () => {
     const pullRequest = await resolveUnknownMergeable(pr);
     core.debug(`Processing PR #${pullRequest.number}`);
 
@@ -99,7 +99,7 @@ module.exports = async ({ github, context, core }) => {
         rerunsTriggered = await triggerReruns("CI", pullRequest);
     }
     return { ...pullRequest, rerunsTriggered, };
-  });
+  })());
 
   core.debug(`Awaiting ${triggeredPullRequests}`);
 
