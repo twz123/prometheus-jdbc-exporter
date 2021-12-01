@@ -20,6 +20,7 @@ jobs:
     - name: Trigger pending PRs
       uses: actions/github-script@v5
       with:
+        github-token: ${{ secrets.TRIGGER_GITHUB_PAT }}
         script: |
           const triggerPendingPullRequests = require('./.github/workflows/trigger-pending-pull-requests.js');
           const triggeredPullRequests = await triggerPendingPullRequests({ github, context, core, });

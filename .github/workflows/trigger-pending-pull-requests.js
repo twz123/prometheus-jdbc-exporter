@@ -76,10 +76,17 @@ module.exports = async ({ github, context, core }) => {
       // Is it required to cancel any runs which are in non-terminal states?
       core.info(`Re-running workflow run ${run.id} for PR #${pullRequest.number} in status ${run.status}`);
       // https://docs.github.com/en/rest/reference/actions#re-run-a-workflow
-      return await github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun', {
+      const { status, data, } = await github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun', {
         ...context.repo,
         run_id: run.id,
       });
+      return {
+        status, data,
+        run: {
+          id: run.id,
+          status: run.status,
+        },
+      };
     })().catch(cause => {
       throw new Error(`failed to re-run workflow run ${run.id}: ${cause}`, { run, cause, });
     }));
