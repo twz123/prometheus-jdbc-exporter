@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches:
+    - main
+
+jobs:
+  build:
+    name: Trigger pending PRs
+    runs-on: ubuntu-20.04
+    timeout-minutes: 5
+
+    steps:
+    - name: Trigger pending PRs
+      uses: actions/github-script@v5
+      with:
+        script: |
+          const triggerPendingPullRequests = require('./.github/workflows/trigger-pending-pull-requests.js');
+          const result = await triggerPendingPullRequests({ github, context, core });
+          core.info(`Result: ${JSON.stringify(result, null, 2)}`);
