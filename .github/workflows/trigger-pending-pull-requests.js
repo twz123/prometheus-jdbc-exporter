@@ -28,7 +28,8 @@ module.exports = async ({ github, context, core }) => {
   })();
 
   const nestedRerunResponses = await Promise.all(mergeablePullRequests.map(pullRequest => {
-    github.actions.listWorkflowRunsForRepo({
+    // https://docs.github.com/en/rest/reference/actions#list-workflow-runs-for-a-repository
+    github.request('GET /repos/{owner}/{repo}/actions/runs', {
       ...context.repo,
       event: "pull_request",
       branch: pullRequest.branch,
@@ -40,6 +41,7 @@ module.exports = async ({ github, context, core }) => {
       }).map((run) => {
         // Is it required to cancel any runs which are in non-terminal states?
         core.info(`Will try to re-run workflow run ${run.id} in status ${run.status}`);
+        // https://docs.github.com/en/rest/reference/actions#re-run-a-workflow
         return github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun', {
           ...context.repo,
           run_id: run.id,
