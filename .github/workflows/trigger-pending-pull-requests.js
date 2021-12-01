@@ -1,5 +1,5 @@
-module.exports = ({ github, context, core }) => {
-  const mergeablePullRequests = (async () => {
+module.exports = async ({ github, context, core }) => {
+  const mergeablePullRequests = await (async () => {
     const query = `
       query ($owner: String!, $repo: String!, $refName: String!) {
         repository(owner: $owner, name: $repo) {
@@ -22,32 +22,31 @@ module.exports = ({ github, context, core }) => {
     const data = await github.graphql(query, { ...context.repo, ...queryVars, });
     core.debug(data);
 
-    return data.repository.pullRequests.nodes.filter(pr => {
-      return pr.mergeable === "MERGEABLE";
-    });
+    return data.repository.pullRequests.nodes
+      .filter(pullRequest => pullRequest.mergeable === "MERGEABLE")
+      .map(({ number, headRef }) => ({ number, branch: headRef.name, }));
   })();
 
-  const reruns = mergeablePullRequests.map(pullRequest => {
+  const nestedRerunResponses = await Promise.all(mergeablePullRequests.map(pullRequest => {
     github.actions.listWorkflowRunsForRepo({
       ...context.repo,
       event: "pull_request",
-      branch: pullRequest.headRef.name,
+      branch: pullRequest.branch,
     }).then(({ data }) => {
-      const rerunPromises = data.workflow_runs.filter((run) => {
+      return Promise.all(data.workflow_runs.filter((run) => {
         return run.name === "CI" && run.pull_requests.some((runPullRequest) => {
           return runPullRequest.number === pullRequest.number;
         })
       }).map((run) => {
         // Is it required to cancel any runs which are in non-terminal states?
         core.info(`Will try to re-run workflow run ${run.id} in status ${run.status}`);
-        github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun', {
+        return github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun', {
           ...context.repo,
           run_id: run.id,
-        })
-      });
-      return Promise.all(rerunPromises);
+        });
+      }));
     })
-  });
+  }));
 
-  return Promise.all(reruns);
+  return nestedRerunResponses.flatMap(rerunResponse => rerunResponse);
 };
