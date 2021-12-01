@@ -45,8 +45,9 @@ module.exports = async ({ github, context, core }) => {
     // Retry up to ten times
     for (let retryAttempt = 0; pullRequest.mergeable === "UNKNOWN" && retryAttempt++ <= 10;) {
       // Delay the next call up to 5 seconds
-      await (new Promise((resolve) => setTimeout(resolve, Math.min(retryAttempt - 1, 4) * 1000 + Math.random() * 1000)));
-      core.debug(`Re-fetching PR #${pullRequest.number}`);
+      const delayMillis = Math.min(retryAttempt - 1, 4) * 1000 + Math.random() * 1000;
+      core.debug(`Re-fetching PR #${pullRequest.number} in ${delayMillis} ms`);
+      await (new Promise((resolve) => setTimeout(resolve, delayMillis)));
       const data = await github.graphql(prQuery, {
         ...context.repo,
         number: pullRequest.number,
@@ -94,7 +95,7 @@ module.exports = async ({ github, context, core }) => {
       }
     });
 
-    if (!errors.isEmpty()) {
+    if (!errors) {
       throw new Error(errors.join(", "), { triggeredReruns, });
     }
 
@@ -136,7 +137,7 @@ module.exports = async ({ github, context, core }) => {
     }
   });
 
-  if (!errors.isEmpty()) {
+  if (!errors) {
     throw new Error(`failed to re-run all required workflows: ${errors.join(", ")}`, { pullRequests, });
   }
 
