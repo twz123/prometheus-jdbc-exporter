@@ -61,17 +61,15 @@ module.exports = async ({ github, context, core }) => {
   // Re-runs workflows for a given pull request.
   const triggerReruns = async (runName, pullRequest) => {
     // https://docs.github.com/en/rest/reference/actions#list-workflow-runs-for-a-repository
-    const runData = await github.request('GET /repos/{owner}/{repo}/actions/runs', {
+    const workflowRuns = (await github.request('GET /repos/{owner}/{repo}/actions/runs', {
       ...context.repo,
       event: "pull_request",
       branch: pullRequest.headRef.name,
     }).catch(cause => {
       throw new Error(`failed to list pull_request workflow runs for PR #${pullRequest.number}: ${cause}`, { cause });
-    });
+    })).data.workflow_runs;
 
-    core.debug(`Fetched workflow runs for PR #${pullRequest.number}: ${JSON.stringify(runData)}`);
-
-    return runData.filter((run) => {
+    return workflowRuns.filter((run) => {
       return run.name === runName && run.pull_requests.some((runPullRequest) => {
         return runPullRequest.number === pullRequest.number;
       })
