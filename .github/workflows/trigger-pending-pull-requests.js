@@ -65,11 +65,9 @@ module.exports = async ({ github, context, core }) => {
       ...context.repo,
       event: "pull_request",
       branch: pullRequest.headRef.name,
-    }).catch(cause => {
-      throw new Error(`failed to list pull_request workflow runs for PR #${pullRequest.number}: ${cause}`, { cause });
     })).data.workflow_runs;
 
-    return workflowRuns.filter((run) => {
+    let promises = workflowRuns.filter((run) => {
       return run.name === runName && run.pull_requests.some((runPullRequest) => {
         return runPullRequest.number === pullRequest.number;
       })
@@ -80,16 +78,33 @@ module.exports = async ({ github, context, core }) => {
       return await github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun', {
         ...context.repo,
         run_id: run.id,
-      }).catch(cause => {
-        throw new Error(`failed to re-run workflow run ${run.id} for PR #${pullRequest.number}: ${cause}`, { cause });
       });
-    })())
+    })().catch(cause => {
+      throw new Error(`failed to re-run workflow run ${run.id}: ${cause}`, { run, cause, });
+    }));
+
+    const triggeredReruns = [], errors = [];
+    (await Promise.allSettled(promises)).forEach(outcome => {
+      if (outcome.status === "fulfilled") {
+        triggeredReruns.push(outcome.value);
+      } else {
+        const error = outcome.reason;
+        errors.push(error);
+        triggeredReruns.push({ ...outcome.reason.run, error, });
+      }
+    });
+
+    if (!errors.isEmpty()) {
+      throw new Error(errors.join(", "), { triggeredReruns, });
+    }
+
+    return triggeredReruns;
   }
 
   const openPullRequests = await fetchOpenPullRequests();
   core.debug(`Fetched open PRs: ${JSON.stringify(openPullRequests, null, 2)}`);
 
-  const triggeredPullRequests = openPullRequests.map(pr => (async () => {
+  const promises = openPullRequests.map(pr => (async () => {
     const pullRequest = await resolveUnknownMergeable(pr);
 
     let rerunsTriggered = false;
@@ -99,16 +114,31 @@ module.exports = async ({ github, context, core }) => {
       // fall through
 
       case "MERGEABLE":
-        rerunsTriggered = await triggerReruns("CI", pullRequest).catch(cause => {
-          return `failed to trigger runs for PR #${pullRequest.number}: ${cause}`;
-        });
+        rerunsTriggered = await triggerReruns("CI", pullRequest);
         break;
 
       default:
         core.debug(`Skipping non-mergeable PR #${pullRequest.number}`);
     }
     return { ...pullRequest, rerunsTriggered, };
-  })());
+  })().catch(cause => {
+    throw new Error(`failed to trigger runs for PR #${pullRequest.number}: ${cause}`, { pullRequest: pr, cause, });
+  }));
 
-  return await Promise.allSettled(triggeredPullRequests);
+  const pullRequests = [], errors = [];
+  (await Promise.allSettled(promises)).forEach(outcome => {
+    if (outcome.status === "fulfilled") {
+      pullRequests.push(outcome.value);
+    } else {
+      const error = outcome.reason;
+      errors.push(error);
+      pullRequests.push({ ...outcome.reason.pullRequest, error, });
+    }
+  });
+
+  if (!errors.isEmpty()) {
+    throw new Error(`failed to re-run all required workflows: ${errors.join(", ")}`, { pullRequests, });
+  }
+
+  return pullRequests;
 };

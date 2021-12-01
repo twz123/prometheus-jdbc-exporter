@@ -22,5 +22,5 @@ jobs:
       with:
         script: |
           const triggerPendingPullRequests = require('./.github/workflows/trigger-pending-pull-requests.js');
-          const result = await triggerPendingPullRequests({ github, context, core });
-          core.info(`Result: ${JSON.stringify(result, null, 2)}`);
+          const triggeredPullRequests = await triggerPendingPullRequests({ github, context, core, });
+          core.info(`Triggered: ${JSON.stringify(triggeredPullRequests, null, 2)}`);
