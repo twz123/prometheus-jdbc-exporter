@@ -24,7 +24,7 @@ module.exports = async ({ github, context, core }) => {
 
     return data.repository.pullRequests.nodes
       .filter(pullRequest => pullRequest.mergeable === "MERGEABLE")
-      .map(({ number, headRef }) => ({ number, branch: headRef.name, }));
+      .map(({ number, headRef }) => ({ number: number, branch: headRef.name, }));
   })();
 
   const nestedRerunResponses = await Promise.all(mergeablePullRequests.map(pullRequest => {
