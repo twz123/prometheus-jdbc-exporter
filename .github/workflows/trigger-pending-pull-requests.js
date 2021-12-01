@@ -24,7 +24,7 @@ module.exports = async ({ github, context, core }) => {
       refName: context.ref.replace(/^refs\/heads\//, "")
     };
 
-    core.debug(`Fetching open PRs: ${queryVars}`);
+    core.debug(`Fetching open PRs: ${JSON.stringify(queryVars)}`);
     const data = await github.graphql(query, { ...context.repo, ...queryVars, });
     return data.repository.pullRequests.nodes;
   };
@@ -44,8 +44,8 @@ module.exports = async ({ github, context, core }) => {
 
     // Retry up to ten times
     for (let retryAttempt = 0; pullRequest.mergeable === "UNKNOWN" && retryAttempt++ <= 10;) {
-      // Delay the next call between 1 and 5 seconds
-      await (new Promise((resolve) => setTimeout(resolve, Math.min(retryAttempt, 5) * 1000)));
+      // Delay the next call up to 5 seconds
+      await (new Promise((resolve) => setTimeout(resolve, Math.min(retryAttempt - 1, 4) * 1000 + Math.random() * 1000)));
       core.debug(`Re-fetching PR #${pullRequest.number}`);
       const data = await github.graphql(prQuery, {
         ...context.repo,
@@ -54,7 +54,7 @@ module.exports = async ({ github, context, core }) => {
       pullRequest = data.repository.pullRequest;
     }
 
-    core.debug(`Resolved mergeable state: ${pullRequest}`);
+    core.debug(`Resolved mergeable state: ${JSON.stringify(pullRequest)}`);
     return pullRequest;
   }
 
@@ -78,16 +78,18 @@ module.exports = async ({ github, context, core }) => {
       return await github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun', {
         ...context.repo,
         run_id: run.id,
-      });
+      }).then(
+        value => ({ runId: run.id, status: "fulfilled", value, }),
+        reason => ({ runId: run.id, status: "rejected", reason, }),
+      );
     })())
   }
 
   const openPullRequests = await fetchOpenPullRequests();
-  core.debug(`Fetched open PRs: ${openPullRequests}`);
+  core.debug(`Fetched open PRs: ${JSON.stringify(openPullRequests, null, 2)}`);
 
   const triggeredPullRequests = openPullRequests.map(pr => (async () => {
     const pullRequest = await resolveUnknownMergeable(pr);
-    core.debug(`Processing PR #${pullRequest.number}`);
 
     let rerunsTriggered = false;
     switch (pullRequest.mergeable) {
@@ -96,15 +98,14 @@ module.exports = async ({ github, context, core }) => {
       // fall through
 
       case "MERGEABLE":
-        rerunsTriggered = await triggerReruns("CI", pullRequest).then(
-          value => ({ status: "fulfilled", value, }),
-          reason => ({ status: "rejected", reason, }),
-        );
+        rerunsTriggered = await triggerReruns("CI", pullRequest);
+        break;
+
+      default:
+        core.debug(`Skipping non-mergeable PR #${pullRequest.number}`);
     }
     return { ...pullRequest, rerunsTriggered, };
   })());
-
-  core.debug(`Awaiting ${triggeredPullRequests}`);
 
   return await Promise.allSettled(triggeredPullRequests);
 };
