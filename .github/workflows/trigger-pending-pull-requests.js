@@ -69,7 +69,9 @@ module.exports = async ({ github, context, core }) => {
       throw new Error(`failed to list pull_request workflow runs for PR #${pullRequest.number}: ${cause}`, { cause });
     });
 
-    return runData.workflow_runs.filter((run) => {
+    core.debug(`Fetched workflow runs for PR #${pullRequest.number}: ${JSON.stringify(runData)}`);
+
+    return runData.filter((run) => {
       return run.name === runName && run.pull_requests.some((runPullRequest) => {
         return runPullRequest.number === pullRequest.number;
       })
