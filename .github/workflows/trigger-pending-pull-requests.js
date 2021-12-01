@@ -96,7 +96,10 @@ module.exports = async ({ github, context, core }) => {
       // fall through
 
       case "MERGEABLE":
-        rerunsTriggered = await triggerReruns("CI", pullRequest);
+        rerunsTriggered = await triggerReruns("CI", pullRequest).then(
+          value => ({ status: "fulfilled", value, }),
+          reason => ({ status: "rejected", reason, }),
+        );
     }
     return { ...pullRequest, rerunsTriggered, };
   })());
