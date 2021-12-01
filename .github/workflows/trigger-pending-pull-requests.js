@@ -49,6 +49,7 @@ module.exports = async ({ github, context, core }) => {
       }));
     })
   }));
+  core.debug(nestedRerunResponses);
 
   return nestedRerunResponses.flatMap(rerunResponse => rerunResponse);
 };
