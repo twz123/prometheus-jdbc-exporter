@@ -60,17 +60,14 @@ module.exports = async ({ github, context, core }) => {
 
   // Re-runs workflows for a given pull request.
   const triggerReruns = async (runName, pullRequest) => {
-    let runData;
-    try {
-      // https://docs.github.com/en/rest/reference/actions#list-workflow-runs-for-a-repository
-      runData = await github.request('GET /repos/{owner}/{repo}/actions/runs', {
-        ...context.repo,
-        event: "pull_request",
-        branch: pullRequest.headRef.name,
-      });
-    } catch (e) {
-      throw new Error(`failed to list pull_request workflow runs for PR #${pullRequest.number}: ${e}`, { cause: e });
-    }
+    // https://docs.github.com/en/rest/reference/actions#list-workflow-runs-for-a-repository
+    const runData = await github.request('GET /repos/{owner}/{repo}/actions/runs', {
+      ...context.repo,
+      event: "pull_request",
+      branch: pullRequest.headRef.name,
+    }).catch(cause => {
+      throw new Error(`failed to list pull_request workflow runs for PR #${pullRequest.number}: ${cause}`, { cause });
+    });
 
     return runData.workflow_runs.filter((run) => {
       return run.name === runName && run.pull_requests.some((runPullRequest) => {
@@ -79,15 +76,13 @@ module.exports = async ({ github, context, core }) => {
     }).map(run => (async () => {
       // Is it required to cancel any runs which are in non-terminal states?
       core.info(`Re-running workflow run ${run.id} for PR #${pullRequest.number} in status ${run.status}`);
-      try {
-        // https://docs.github.com/en/rest/reference/actions#re-run-a-workflow
-        return await github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun', {
-          ...context.repo,
-          run_id: run.id,
-        });
-      } catch (e) {
-        throw new Error(`failed to re-run workflow run ${run.id} for PR #${pullRequest.number}: ${e}`, { cause: e });
-      }
+      // https://docs.github.com/en/rest/reference/actions#re-run-a-workflow
+      return await github.request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun', {
+        ...context.repo,
+        run_id: run.id,
+      }).catch(cause => {
+        throw new Error(`failed to re-run workflow run ${run.id} for PR #${pullRequest.number}: ${cause}`, { cause });
+      });
     })())
   }
 
@@ -104,7 +99,9 @@ module.exports = async ({ github, context, core }) => {
       // fall through
 
       case "MERGEABLE":
-        rerunsTriggered = await triggerReruns("CI", pullRequest);
+        rerunsTriggered = await triggerReruns("CI", pullRequest).catch(cause => {
+          return new Error(`failed to trigger runs for PR #${pullRequest.number}: ${cause}`, { cause });
+        });
         break;
 
       default:
