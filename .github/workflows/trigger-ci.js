@@ -64,20 +64,20 @@ module.exports = ({ github, context, core, }) => {
       throw new Error(`failed to dispatch workflow for PR #${pr.number}`, { pullRequest: pr, cause, });
     }));
 
-    const dispatchedBuilds = [], errors = [];
+    const dispatchedBuilds = [], errorMessages = [];
     (await Promise.allSettled(promises)).forEach(outcome => {
       if (outcome.status === "fulfilled") {
         dispatchedBuilds.push(outcome.value);
       } else {
         const error = outcome.reason;
-        errors.push(error);
+        errorMessages.push(error.message);
         dispatchedBuilds.push({ error, });
       }
     });
 
-    if (errors) {
-      core.debug(`Errors during dispatch: ${errors.join(", ")}`);
-      throw new Error(errors.join(", "), { dispatchedBuilds, });
+    if (errorMessages) {
+      core.debug(`Errors during dispatch: ${errorMessages.join(", ")}`);
+      throw new Error(errorMessages.join(", "), { dispatchedBuilds, });
     }
 
     return dispatchedBuilds;
