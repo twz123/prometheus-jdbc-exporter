@@ -102,7 +102,7 @@ module.exports = async ({ github, context, core }) => {
       }
     });
 
-    if (!errors) {
+    if (errors.length) {
       throw new Error(errors.join(", "), { triggeredReruns, });
     }
 
@@ -144,7 +144,7 @@ module.exports = async ({ github, context, core }) => {
     }
   });
 
-  if (!errors) {
+  if (errors.length) {
     throw new Error(`failed to re-run all required workflows: ${errors.join(", ")}`, { pullRequests, });
   }
 
