@@ -76,6 +76,7 @@ module.exports = ({ github, context, core, }) => {
     });
 
     if (errors) {
+      core.debug(`Errors during dispatch: ${errors.join(", ")}`);
       throw new Error(errors.join(", "), { dispatchedBuilds, });
     }
 
