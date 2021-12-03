@@ -1,5 +1,19 @@
 module.exports = async ({ github, context, core }) => {
 
+  class Problem extends Error {
+    cause;
+    opts;
+
+    constructor(message, opts) {
+      super(message);
+      this.opts = { ...opts };
+      if ("cause" in this.opts) {
+        this.cause = this.opts.cause;
+        delete this.opts.cause;
+      }
+    }
+  }
+
   const prQueryFragment = `
     number mergeable
     headRef { name }
@@ -27,6 +41,27 @@ module.exports = async ({ github, context, core }) => {
     core.debug(`Fetching open PRs: ${JSON.stringify(queryVars)}`);
     const data = await github.graphql(query, { ...context.repo, ...queryVars, });
     return data.repository.pullRequests.nodes;
+  };
+
+  const awaitAll = async (promises, errorProp, resultsProp) => {
+    const results = [], errorMessages = [];
+    (await Promise.allSettled(promises)).forEach(outcome => {
+      if (outcome.status === "fulfilled") {
+        results.push(outcome.value);
+      } else {
+        const error = outcome.reason;
+        errorMessages.push(error.message);
+        results.push({ ...error.opts[errorProp], error: error.cause, });
+      }
+    });
+
+    if (errorMessages.length) {
+      const opts = {};
+      opts[resultsProp] = results;
+      throw new Problem(errorMessages.join(", "), opts);
+    }
+
+    return results;
   };
 
   // Resolve pull requests until the mergeable state is no longer unknown.
@@ -88,25 +123,10 @@ module.exports = async ({ github, context, core }) => {
         },
       };
     })().catch(cause => {
-      throw new Error(`failed to re-run workflow run ${run.id}: ${cause}`, { run, cause, });
+      throw new Problem(`failed to re-run workflow run ${run.id}: ${cause}`, { cause, run, });
     }));
 
-    const triggeredReruns = [], errors = [];
-    (await Promise.allSettled(promises)).forEach(outcome => {
-      if (outcome.status === "fulfilled") {
-        triggeredReruns.push(outcome.value);
-      } else {
-        const error = outcome.reason;
-        errors.push(error);
-        triggeredReruns.push({ ...outcome.reason.run, error, });
-      }
-    });
-
-    if (errors.length) {
-      throw new Error(errors.join(", "), { triggeredReruns, });
-    }
-
-    return triggeredReruns;
+    return await awaitAll(promises, "run", "triggeredReruns");
   }
 
   const openPullRequests = await fetchOpenPullRequests();
@@ -130,23 +150,8 @@ module.exports = async ({ github, context, core }) => {
     }
     return { ...pullRequest, rerunsTriggered, };
   })().catch(cause => {
-    throw new Error(`failed to trigger runs for PR #${pullRequest.number}: ${cause}`, { pullRequest: pr, cause, });
+    throw new Problem(`failed to trigger runs for PR #${pr.number}: ${cause}`, { cause, pullRequest: pr, });
   }));
 
-  const pullRequests = [], errors = [];
-  (await Promise.allSettled(promises)).forEach(outcome => {
-    if (outcome.status === "fulfilled") {
-      pullRequests.push(outcome.value);
-    } else {
-      const error = outcome.reason;
-      errors.push(error);
-      pullRequests.push({ ...outcome.reason.pullRequest, error, });
-    }
-  });
-
-  if (errors.length) {
-    throw new Error(`failed to re-run all required workflows: ${errors.join(", ")}`, { pullRequests, });
-  }
-
-  return pullRequests;
+  return await awaitAll(promises, "pullRequest", "pullRequests");
 };
