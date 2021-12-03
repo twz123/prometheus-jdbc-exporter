@@ -1,4 +1,4 @@
-module.exports = async ({ github, context, core }) => {
+module.exports = async ({ runName, github, context, core }) => {
 
   class Problem extends Error {
     cause;
@@ -95,7 +95,7 @@ module.exports = async ({ github, context, core }) => {
   }
 
   // Re-runs workflows for a given pull request.
-  const triggerReruns = async (runName, pullRequest) => {
+  const triggerReruns = async (pullRequest) => {
     // https://docs.github.com/en/rest/reference/actions#list-workflow-runs-for-a-repository
     const workflowRuns = (await github.request('GET /repos/{owner}/{repo}/actions/runs', {
       ...context.repo,
@@ -142,7 +142,7 @@ module.exports = async ({ github, context, core }) => {
       // fall through
 
       case "MERGEABLE":
-        rerunsTriggered = await triggerReruns("CI", pullRequest);
+        rerunsTriggered = await triggerReruns(pullRequest);
         break;
 
       default:

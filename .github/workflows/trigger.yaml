@@ -1,13 +1,11 @@
 name: Trigger
 
 on:
-  push:
-    branches:
-    - main
+- push
 
 jobs:
-  trigger_pending_pull_requests:
-    name: Trigger pending PRs
+  trigger_incoming_pull_requests:
+    name: Trigger incoming PRs
     runs-on: ubuntu-20.04
     timeout-minutes: 5
 
@@ -17,11 +15,13 @@ jobs:
       with:
         persist-credentials: false
 
-    - name: Trigger pending PRs
+    - name: Trigger incoming PRs
       uses: actions/github-script@v5
       with:
-        github-token: ${{ secrets.TRIGGER_GITHUB_PAT }}
+        # github-token: ${{ secrets.TRIGGER_GITHUB_PAT }}
         script: |
-          const triggerPendingPullRequests = require('./.github/workflows/trigger-pending-pull-requests.js');
-          const triggeredPullRequests = await triggerPendingPullRequests({ github, context, core, });
+          const triggerIncomingPullRequests = require('./.github/workflows/trigger-incoming-pull-requests.js');
+          const triggeredPullRequests = await triggerIncomingPullRequests(
+            { runName: "CI", github, context, core, }
+          );
           core.info(`Triggered: ${JSON.stringify(triggeredPullRequests, null, 2)}`);
