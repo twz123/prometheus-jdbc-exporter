@@ -26,34 +26,33 @@ jobs:
           if (context.payload.pull_request) {
             const { number, } = context.payload.pull_request;
             output.version = `PR-${number}`;
-            const query =
-              `query ($owner: String!, $repo: String!, $number: Int!) {
-                repository(owner: $owner, name: $repo) {
-                  pullRequest(number: $number) {
-                    mergeable
-                    potentialMergeCommit { oid }
-                  }
+            const data = await github.graphql(`query ($owner: String!, $repo: String!, $number: Int!) {
+              repository(owner: $owner, name: $repo) {
+                pullRequest(number: $number) {
+                  mergeable
+                  potentialMergeCommit { oid }
                 }
-              }`;
-            const data = await github.graphql(query, { ...context.repo, number, });
+              }
+            }`, { ...context.repo, number, });
             core.debug(`Response: ${JSON.stringify(data, null, 2)}`);
             const { potentialMergeCommit, mergeable, } = data.repository.pullRequest;
             output.mergeable = mergeable;
-            if (mergeable === "MERGEABLE" || mergeable === "UNKNOWN") {
-              output.ref = potentialMergeCommit.oid;
+            switch (mergeable) {
+              case "UNKNOWN": core.warning(`Mergeable state unknown for PR #${number}`); // fall-through
+              case "MERGEABLE": output.ref = potentialMergeCommit.oid;
             }
           } else if (ref === "refs/heads/main") {
             output.version = `${new Date().toISOString().replace(/T.+/, "").replace(/-0*/g, ".")}.${process.env.GITHUB_RUN_NUMBER}`;
           } else if (ref.startsWith('refs/heads/')) {
             output.version = `B-${ref.replace(/^refs\/heads\//, "").replace(/\//g, "-")}`;
           } else if (ref.startsWith('refs/tags/')) {
-            output.version = `B-${ref.replace(/^refs\/tags\//, "").replace(/\//g, "-")}`;
+            output.version = `${ref.replace(/^refs\/tags\//, "").replace(/\//g, "-")}`;
           } else {
             core.setFailed(`Unsupported ref: ${ref}`);
             return;
           }
 
-          core.info(`Generated: ${JSON.stringify(output, null, 2)}`);
+          core.info(`Initialized: ${JSON.stringify(output, null, 2)}`);
           Object.entries(output).forEach(([key, value]) => core.setOutput(key, value));
 
     - name: Checkout
